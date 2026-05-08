@@ -112,13 +112,31 @@ if [ $APP_ONLY -eq 0 ]; then
     if [ -n "$SIGN_TOOL" ]; then
         TRUSTED_BIN="${WOLFBOOT_ROOT}/wolfboot-trusted.bin"
         chmod u+w "${TRUSTED_BIN}" 2>/dev/null; rm -f "${TRUSTED_BIN}"
-        echo -e "${CYAN}  Generating FSBL header (STM32_SigningTool_CLI)...${NC}"
-        "$SIGN_TOOL" -bin "${WOLFBOOT_ROOT}/wolfboot.bin" -nk -of 0x80000000 -t fsbl -hv 2.3 -align -la ${SRAM_ADDR} -ep ${SRAM_ADDR} -o "${TRUSTED_BIN}" || true
+        # Entry point = Reset_Handler address from vector table word 1.
+        # Boot ROM jumps directly to this address (UM3234 Section 5.1).
+        FSBL_EP=$(od -A n -j 4 -t x4 -N 4 "${WOLFBOOT_ROOT}/wolfboot.bin" | awk '{print "0x"$1}')
+        echo -e "${CYAN}  Generating FSBL header (entry point: ${FSBL_EP})...${NC}"
+        "$SIGN_TOOL" -bin "${WOLFBOOT_ROOT}/wolfboot.bin" -nk -of 0x80000000 -t fsbl -hv 2.3 -align -la ${SRAM_ADDR} -ep ${FSBL_EP} -o "${TRUSTED_BIN}" || true
         [ -f "${TRUSTED_BIN}" ] || { echo -e "${RED}Failed to generate trusted binary${NC}"; exit 1; }
         echo -e "${CYAN}  wolfboot-trusted.bin -> NOR 0x70000000${NC}"
         OPENOCD_CMDS+="flash write_image erase ${TRUSTED_BIN} 0x70000000; "
     else
-        echo -e "${YELLOW}  STM32_SigningTool_CLI not found, loading wolfBoot to SRAM only${NC}"
+        # Fallback: generate FSBL header with Python script (UM3234 spec)
+        TRUSTED_BIN="${WOLFBOOT_ROOT}/wolfboot-trusted.bin"
+        rm -f "${TRUSTED_BIN}"
+        HEADER_SCRIPT="${SCRIPT_DIR}/stm32n6_fsbl_header.py"
+        if [ -f "${HEADER_SCRIPT}" ] && command -v python3 &>/dev/null; then
+            echo -e "${CYAN}  Generating FSBL header (Python fallback)...${NC}"
+            python3 "${HEADER_SCRIPT}" "${WOLFBOOT_ROOT}/wolfboot.bin" "${TRUSTED_BIN}" ${SRAM_ADDR}
+            if [ -f "${TRUSTED_BIN}" ]; then
+                echo -e "${CYAN}  wolfboot-trusted.bin -> NOR 0x70000000${NC}"
+                OPENOCD_CMDS+="flash write_image erase ${TRUSTED_BIN} 0x70000000; "
+            else
+                echo -e "${YELLOW}  FSBL header generation failed, loading wolfBoot to SRAM only${NC}"
+            fi
+        else
+            echo -e "${YELLOW}  No FSBL header tool found, loading wolfBoot to SRAM only${NC}"
+        fi
     fi
 
     # Also load wolfBoot directly to SRAM for immediate execution

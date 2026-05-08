@@ -192,7 +192,24 @@ asm(
         );
 #endif
 
+#ifdef TARGET_stm32n6
+/* STM32N6 NOR boot: Boot ROM jumps to FSBL entry without setting SP.
+ * Naked stub sets SP first, then tail-calls the C body. Safe for HW reset
+ * too (SP = END_STACK, same value HW reset would load from VTOR[0]). */
+void isr_reset_main(void);
+__attribute__((naked, noreturn, used))
 void isr_reset(void) {
+    __asm volatile (
+        ".syntax unified\n"
+        "ldr r0, =END_STACK\n"
+        "mov sp, r0\n"
+        "b isr_reset_main\n"
+    );
+}
+void isr_reset_main(void) {
+#else
+void isr_reset(void) {
+#endif
     register unsigned int *src, *dst;
 #if defined(TARGET_kinetis)
     /* Immediately disable Watchdog after boot */

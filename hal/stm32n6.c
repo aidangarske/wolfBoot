@@ -57,14 +57,15 @@ static int RAMFUNCTION octospi_cmd(uint8_t fmode, uint8_t cmd,
     uint32_t dummyCycles)
 {
     uint32_t ccr;
+    volatile uint32_t t;
 
     /* Abort memory-mapped mode if active */
     if ((OCTOSPI_CR & OCTOSPI_CR_FMODE_MASK) == OCTOSPI_CR_FMODE_MMAP) {
         OCTOSPI_CR |= OCTOSPI_CR_ABORT;
-        while (OCTOSPI_CR & OCTOSPI_CR_ABORT)
+        for (t = 0; t < 100000 && (OCTOSPI_CR & OCTOSPI_CR_ABORT); t++)
             ;
     }
-    while (OCTOSPI_SR & OCTOSPI_SR_BUSY)
+    for (t = 0; t < 100000 && (OCTOSPI_SR & OCTOSPI_SR_BUSY); t++)
         ;
     OCTOSPI_FCR = OCTOSPI_FCR_CTCF | OCTOSPI_FCR_CTEF | OCTOSPI_FCR_CSMF;
 
@@ -125,9 +126,9 @@ static int RAMFUNCTION octospi_cmd(uint8_t fmode, uint8_t cmd,
         }
     }
 
-    while (!(OCTOSPI_SR & (OCTOSPI_SR_TCF | OCTOSPI_SR_TEF)))
+    for (t = 0; t < 100000 && !(OCTOSPI_SR & (OCTOSPI_SR_TCF | OCTOSPI_SR_TEF)); t++)
         ;
-    if (OCTOSPI_SR & OCTOSPI_SR_TEF) goto octospi_err;
+    if (t >= 100000 || (OCTOSPI_SR & OCTOSPI_SR_TEF)) goto octospi_err;
     OCTOSPI_FCR = OCTOSPI_FCR_CTCF;
 
     return 0;
@@ -135,7 +136,7 @@ static int RAMFUNCTION octospi_cmd(uint8_t fmode, uint8_t cmd,
 octospi_err:
     OCTOSPI_FCR = OCTOSPI_FCR_CTEF;
     OCTOSPI_CR |= OCTOSPI_CR_ABORT;
-    while (OCTOSPI_CR & OCTOSPI_CR_ABORT)
+    for (t = 0; t < 100000 && (OCTOSPI_CR & OCTOSPI_CR_ABORT); t++)
         ;
     return -1;
 }
@@ -158,13 +159,14 @@ static void RAMFUNCTION octospi_wait_ready(void)
 
 static void RAMFUNCTION octospi_enable_mmap(void)
 {
+    volatile uint32_t t;
     /* Abort first if already in mmap mode (BUSY stays set in mmap) */
     if ((OCTOSPI_CR & OCTOSPI_CR_FMODE_MASK) == OCTOSPI_CR_FMODE_MMAP) {
         OCTOSPI_CR |= OCTOSPI_CR_ABORT;
-        while (OCTOSPI_CR & OCTOSPI_CR_ABORT)
+        for (t = 0; t < 100000 && (OCTOSPI_CR & OCTOSPI_CR_ABORT); t++)
             ;
     }
-    while (OCTOSPI_SR & OCTOSPI_SR_BUSY)
+    for (t = 0; t < 100000 && (OCTOSPI_SR & OCTOSPI_SR_BUSY); t++)
         ;
     OCTOSPI_FCR = OCTOSPI_FCR_CTCF | OCTOSPI_FCR_CTEF | OCTOSPI_FCR_CSMF;
 
@@ -301,19 +303,35 @@ static void octospi_init(void)
 {
     volatile uint32_t delay;
 
+    /* Enable XSPI2 and XSPIM clocks */
     RCC_AHB5ENR |= RCC_AHB5ENR_XSPI2EN | RCC_AHB5ENR_XSPIMEN;
     RCC_MISCENR |= RCC_MISCENR_XSPIPHYCOMPEN;
     DMB();
+    for (delay = 0; delay < 1000; delay++)
+        ;
 
+    /* After NOR boot, Boot ROM leaves XSPI1 on Port N (XSPIM MODE=1).
+     * Reset XSPIM + XSPI1 via RCC, then clear XSPIM_CR via secure alias. */
+    RCC_AHB5RSTR = RCC_AHB5ENR_XSPIMEN | RCC_AHB5ENR_XSPI1EN;
+    DMB();
+    for (delay = 0; delay < 100; delay++) ;
+    RCC_AHB5RSTR = 0;
+    DMB();
+    for (delay = 0; delay < 1000; delay++) ;
+    XSPIM_CR = 0;
+    DMB();
+    for (delay = 0; delay < 1000; delay++) ;
+
+    /* Now configure XSPI2 with timeouts on BUSY waits */
     OCTOSPI_CR = 0;
-    while (OCTOSPI_SR & OCTOSPI_SR_BUSY)
+    for (delay = 0; delay < 100000 && (OCTOSPI_SR & OCTOSPI_SR_BUSY); delay++)
         ;
 
     OCTOSPI_DCR1 = OCTOSPI_DCR1_DLYBYP |
                    OCTOSPI_DCR1_DEVSIZE(FLASH_DEVICE_SIZE_LOG2) |
                    OCTOSPI_DCR1_CSHT(3);
     OCTOSPI_DCR2 = OCTOSPI_DCR2_PRESCALER(16);
-    while (OCTOSPI_SR & OCTOSPI_SR_BUSY)
+    for (delay = 0; delay < 100000 && (OCTOSPI_SR & OCTOSPI_SR_BUSY); delay++)
         ;
 
     OCTOSPI_CR = OCTOSPI_CR_FTHRES(1) | OCTOSPI_CR_EN;
@@ -349,7 +367,22 @@ static void clock_config(void)
     while (!(RCC_SR & RCC_SR_HSIRDY))
         ;
 
-    /* Disable PLL1 before reconfiguring */
+    /* Switch CPU and system bus to HSI before disabling PLL1.
+     * In NOR boot mode, the Boot ROM runs the CPU at 400 MHz from PLL1/IC1.
+     * Disabling PLL1 while the CPU is clocked from it causes a hard fault. */
+    {
+        uint32_t cfgr1 = RCC_CFGR1;
+        cfgr1 &= ~(RCC_CFGR1_CPUSW_MASK | RCC_CFGR1_SYSSW_MASK);
+        /* CPUSW=0 (HSI), SYSSW=0 (HSI) */
+        RCC_CFGR1 = cfgr1;
+        /* Wait for clock switch to complete */
+        while ((RCC_CFGR1 & RCC_CFGR1_CPUSWS_MASK) != 0)
+            ;
+        while ((RCC_CFGR1 & RCC_CFGR1_SYSSWS_MASK) != 0)
+            ;
+    }
+
+    /* Disable PLL1 before reconfiguring — safe now that CPU runs on HSI */
     RCC_CCR = RCC_CR_PLL1ON;
     while (RCC_SR & RCC_SR_PLL1RDY)
         ;
@@ -422,11 +455,13 @@ static void clock_config(void)
 /* USART1 on PE5 (TX) / PE6 (RX), AF7 */
 
 #define UART_BASE        USART1_BASE
-#define UART_CLOCK_FREQ  200000000UL /* PCLK2 = IC2(400MHz) / AHB(2) / APB2(1) */
 
 static void uart_init_baud(uint32_t baud)
 {
     uint32_t reg;
+
+    /* USART1 kernel clock = PCLK2 (default path, no XBAR/FINDIV needed).
+     * After clock_config(): PCLK2 = IC2(400MHz) / HPRE(2) = 200 MHz. */
 
     RCC_APB2ENR |= RCC_APB2ENR_USART1EN;
     RCC_AHB4ENR |= RCC_AHB4ENR_GPIOEEN;
@@ -453,19 +488,28 @@ static void uart_init_baud(uint32_t baud)
     UART_CR1(UART_BASE) = 0;
     UART_CR2(UART_BASE) = 0;
     UART_CR3(UART_BASE) = 0;
-    UART_BRR(UART_BASE) = (UART_CLOCK_FREQ + baud / 2) / baud;
+    UART_BRR(UART_BASE) = (200000000UL + baud / 2) / baud;
     UART_CR1(UART_BASE) = USART_CR1_TE | USART_CR1_RE | USART_CR1_UE;
+
+    /* Wait for TEACK (bit 21) — UART kernel clock must be running */
+    { volatile uint32_t t;
+      for (t = 0; t < 1000000 && !(UART_ISR(UART_BASE) & (1 << 21)); t++)
+          ; }
 }
 
 void uart_write(const char *buf, unsigned int len)
 {
     unsigned int i;
+    volatile unsigned int timeout;
     for (i = 0; i < len; i++) {
-        while (!(UART_ISR(UART_BASE) & USART_ISR_TXE))
+        timeout = 1000000;
+        while (!(UART_ISR(UART_BASE) & USART_ISR_TXE) && --timeout)
             ;
+        if (timeout == 0) return;
         UART_TDR(UART_BASE) = buf[i];
     }
-    while (!(UART_ISR(UART_BASE) & USART_ISR_TC))
+    timeout = 1000000;
+    while (!(UART_ISR(UART_BASE) & USART_ISR_TC) && --timeout)
         ;
 }
 #endif
@@ -522,6 +566,7 @@ void hal_init(void)
         ISB();
     }
 #endif
+
     clock_config();
     pwr_enable_io_supply();
     icache_enable();
