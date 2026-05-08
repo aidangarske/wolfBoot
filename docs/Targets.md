@@ -1849,6 +1849,12 @@ AXISRAM — with TrustZone (TZEN=1, secure alias):
   0x34000000  Application SRAM (SAU region: non-secure)
 ```
 
+Note: `0x24xxxxxx` and `0x34xxxxxx` are two aliases of the same physical
+AXISRAM. The IDAU marks the `0x24xxxxxx` view as Secure and the
+`0x34xxxxxx` view as Non-Secure; SAU regions can refine the NS view. The
+load address (selected by `WOLFBOOT_ORIGIN` in `arch.mk` and the flash
+script) determines the security attribution wolfBoot itself runs under.
+
 ### Build and Flash
 
 Use the example configuration and build:
@@ -1967,15 +1973,55 @@ The BRR is calculated accordingly for 115200 baud.
 
 ### Flash Script Options
 
-The flash script supports several modes:
+The flash script (`tools/scripts/stm32n6_flash.sh`) uses STM32CubeProgrammer
+(`STM32_Programmer_CLI` + `STM32_SigningTool_CLI`) for NOR programming and
+FSBL header generation:
 
 ```sh
-./tools/scripts/stm32n6_flash.sh                  # Build and flash all
-./tools/scripts/stm32n6_flash.sh --skip-build      # Flash only (existing binaries)
-./tools/scripts/stm32n6_flash.sh --app-only         # Flash signed app only
-./tools/scripts/stm32n6_flash.sh --test-update      # Flash v1 boot + v2 update
-./tools/scripts/stm32n6_flash.sh --halt             # Leave OpenOCD running
+./tools/scripts/stm32n6_flash.sh                  # Build, sign FSBL, flash NOR (cold-boot ready)
+./tools/scripts/stm32n6_flash.sh --skip-build     # Flash only (existing binaries)
+./tools/scripts/stm32n6_flash.sh --app-only       # Flash signed app only
+./tools/scripts/stm32n6_flash.sh --test-update    # Flash v1 boot + v2 update
+./tools/scripts/stm32n6_flash.sh --swd-only       # Skip FSBL header, SWD-load wolfBoot to SRAM
+./tools/scripts/stm32n6_flash.sh --otp-info       # Read OTP fuses 11/13/14/18/124
+./tools/scripts/stm32n6_flash.sh --erase-fsbl     # Erase FSBL slot (sectors 0-3)
 ```
+
+The script auto-discovers STM32CubeProgrammer at the default install paths.
+Override with `STM32_PRG_PATH=...` if needed.
+
+### Cold-Boot from XSPI2 NOR (BootROM)
+
+In addition to the SWD-load workflow, wolfBoot can be cold-booted directly
+from XSPI2 NOR by the on-chip BootROM. The flash script with the default
+arguments wraps `wolfboot.bin` with the v2.3 FSBL header (using
+`STM32_SigningTool_CLI -hv 2.3 -align -nk -t fsbl`) and writes it to NOR
+offset 0 (`0x70000000`).
+
+**Required jumper position for cold-boot:** `JP1=1-2`, `JP2=1-2` on the
+NUCLEO-N657X0-Q (per ST `Template_FSBL_XIP/README.md`). Dev/SWD-load
+mode is `JP2=2-3`.
+
+**Required OTP fuse:** `BOOTROM_CONFIG_2.boot_source` (OTP word 11, bits
+5-8) must be set to **3 (sNOR / XSPI NOR)**. With the factory-default
+value `0`, the BootROM treats no boot source as configured and exits
+silently when in cold-boot mode (no LED, no FSBL load attempt). To
+program (irreversible):
+
+```sh
+STM32_Programmer_CLI -c port=SWD mode=UR -otp write word=11 value=0x60
+# verify:
+STM32_Programmer_CLI -c port=SWD mode=UR -otp displ word=11
+# Expected: Data11 = 0x00000060
+```
+
+The factory-set OTP word 124 bit 15 (`VDDIO3_HSLV`) must also be
+programmed for high-speed XSPI access; ST's `Template_FSBL_XIP` does this
+on first run.
+
+**OTP fuses do NOT change the chip lifecycle state.** SWD-load workflow
+(`--swd-only`) keeps working regardless of OTP11 state — boot pins take
+precedence in dev mode.
 
 ### Debugging
 

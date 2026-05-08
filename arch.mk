@@ -274,10 +274,16 @@ ifeq ($(ARCH),ARM)
     CORTEX_M55=1
     CFLAGS+=-Ihal
     ARCH_FLASH_OFFSET=0x70000000
+    # Link at 0x34180400 (or its secure alias 0x24180400 with TZEN=1):
+    # the on-chip BootROM reserves the first 0x400 bytes of AXISRAM2 for
+    # its own use and loads the FSBL payload to 0x34180400. wolfBoot must
+    # be linked at this address so absolute references resolve correctly
+    # after the BootROM hand-off. ST's NUCLEO-N657X0-Q FSBL templates do
+    # the same.
     ifeq ($(TZEN),1)
-      WOLFBOOT_ORIGIN=0x24000000
+      WOLFBOOT_ORIGIN=0x24180400
     else
-      WOLFBOOT_ORIGIN=0x34000000
+      WOLFBOOT_ORIGIN=0x34180400
     endif
     EXT_FLASH=1
     PART_UPDATE_EXT=1

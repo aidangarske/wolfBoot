@@ -192,7 +192,24 @@ asm(
         );
 #endif
 
+#ifdef TARGET_stm32n6
+/* STM32N6 NOR boot: Boot ROM jumps to FSBL entry without setting SP.
+ * Naked stub sets SP first, then tail-calls the C body. Safe for HW reset
+ * too (SP = END_STACK, same value HW reset would load from VTOR[0]). */
+void isr_reset_main(void);
+__attribute__((naked, noreturn, used))
 void isr_reset(void) {
+    __asm volatile (
+        ".syntax unified\n"
+        "ldr r0, =END_STACK\n"
+        "mov sp, r0\n"
+        "b isr_reset_main\n"
+    );
+}
+void isr_reset_main(void) {
+#else
+void isr_reset(void) {
+#endif
     register unsigned int *src, *dst;
 #if defined(TARGET_kinetis)
     /* Immediately disable Watchdog after boot */
@@ -420,9 +437,13 @@ void isr_empty(void)
  */
 
 #if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && \
-    defined(TZEN) && !defined(CORTEX_M55)
+    defined(TZEN)
 #include "hal.h"
-#define VTOR (*(volatile uint32_t *)(0xE002ED08)) /* Non-secure VTOR */
+/* Non-secure VTOR. Used for both Cortex-M33 (which transitions to NS via
+ * blxns) and Cortex-M55/STM32N6 (where the app runs from SAU NS-marked
+ * memory). Writing the secure VTOR to NS-attributed memory would leave the
+ * secure exception table pointing into NS-controlled memory. */
+#define VTOR (*(volatile uint32_t *)(0xE002ED08))
 #else
 #define VTOR (*(volatile uint32_t *)(0xE000ED08))
 #endif

@@ -162,6 +162,7 @@
 #define RCC_DIVENR_IC4EN        (1 << 3)
 #define RCC_DIVENR_IC5EN        (1 << 4)
 #define RCC_DIVENR_IC6EN        (1 << 5)
+#define RCC_DIVENR_IC9EN        (1 << 8)
 #define RCC_DIVENR_IC11EN       (1 << 10)
 
 /* Clock enable registers */
@@ -197,11 +198,26 @@
 #define RCC_AHB5ENR_XSPI2EN    (1 << 12)
 #define RCC_AHB5ENR_XSPIMEN    (1 << 13)
 
+/* XSPI reset in RCC_AHB5RSTR (same bit positions as ENR) */
+#define RCC_AHB5RSTR            (*(volatile uint32_t *)(RCC_BASE + 0x210))
+
 /* XSPI PHY compensation clock in RCC_MISCENR */
 #define RCC_MISCENR_XSPIPHYCOMPEN  (1 << 3)
 
 /* USART clock enable */
 #define RCC_APB2ENR_USART1EN   (1 << 4)
+
+/* USART1 kernel clock — Flexiclockgen path: IC → XBAR → FINDIV → peripheral.
+ * XBAR16 selects source, FINDIV16 divides and gates the clock. */
+#define RCC_FINDIV16CFGR        (*(volatile uint32_t *)(RCC_BASE + 0x340))
+#define RCC_FINDIV_EN           (1 << 6) /* Enable final divider output */
+#define RCC_XBAR16CFGR          (*(volatile uint32_t *)(RCC_BASE + 0xC40))
+#define RCC_XBAR16CFGR_SEL_IC9  0  /* IC9 (default) */
+#define RCC_XBAR16CFGR_SEL_IC14 1
+#define RCC_XBAR16CFGR_SEL_HSI  2  /* HSI 64 MHz — always running */
+#define RCC_XBAR16CFGR_SEL_MSI  3
+#define RCC_XBAR16CFGR_SEL_LSE  4
+#define RCC_XBAR16CFGR_EN       (1 << 6) /* Enable crossbar output */
 
 
 /*** PWR (Power Control) — base 0x56024800 (secure) ***/
@@ -304,7 +320,8 @@
 #define OCTOSPI_FCR_CSMF        (1 << 3)  /* Clear Status Match Flag */
 #define OCTOSPI_DCR1_DLYBYP     (1 << 3)  /* Bypass delay block (N6-specific) */
 
-/*** XSPIM (XSPI I/O Manager) ***/
+/*** XSPIM (XSPI I/O Manager) — always use secure alias.
+ * RIFSC blocks non-secure access to XSPIM on STM32N6. */
 #define XSPIM_BASE              (0x5802B400UL)
 #define XSPIM_CR                (*(volatile uint32_t *)(XSPIM_BASE + 0x00))
 
