@@ -1,0 +1,73 @@
+/* Keystore file for wolfBoot, automatically generated. Do not edit.  */
+/*
+ * This file has been generated and contains the public keys
+ * used by wolfBoot to verify the updates.
+ */
+#include <stdint.h>
+#include "wolfboot/wolfboot.h"
+#include "keystore.h"
+
+
+
+#define KEYSTORE_SECTION __attribute__((section (".keystore")))
+
+#define NUM_PUBKEYS 1
+const KEYSTORE_SECTION struct keystore_slot PubKeys[NUM_PUBKEYS] = {
+
+    /* Key associated to file 'wolfboot_signing_private_key.der' */
+    {
+        .slot_id = 0,
+        .key_type = AUTH_KEY_ECC384,
+        .part_id_mask = 0xFFFFFFFF,
+        .pubkey_size = 96,
+        .pubkey = {
+            
+            0xa8, 0x51, 0xd1, 0x79, 0x35, 0xbc, 0xb6, 0xd6,
+            0x83, 0xcf, 0x35, 0xf8, 0x46, 0x7a, 0x3a, 0xb2,
+            0xed, 0xce, 0x4d, 0xce, 0x21, 0x95, 0xa3, 0xba,
+            0xc0, 0x73, 0xa9, 0xe8, 0x1a, 0xf7, 0x46, 0xdb,
+            0x5e, 0x18, 0xfa, 0x1b, 0xf3, 0x0e, 0x88, 0x94,
+            0x72, 0x9c, 0x82, 0x28, 0x86, 0x77, 0xed, 0xcd,
+            0x31, 0x25, 0xbe, 0x6f, 0x92, 0x05, 0x74, 0x30,
+            0x4a, 0x6c, 0xf3, 0x49, 0x3f, 0x17, 0xa5, 0xa4,
+            0xce, 0xd9, 0xec, 0xe3, 0xa5, 0x8f, 0xa9, 0xa4,
+            0xf3, 0xab, 0x93, 0x69, 0xb5, 0x70, 0x7c, 0xd6,
+            0x21, 0x5b, 0x3b, 0xe2, 0xe1, 0x3b, 0x8d, 0x4c,
+            0xcf, 0x0c, 0xc0, 0xd7, 0xa1, 0x94, 0x72, 0xa4
+
+
+        },
+    },
+
+
+};
+
+int keystore_num_pubkeys(void)
+{
+    return NUM_PUBKEYS;
+}
+
+uint8_t *keystore_get_buffer(int id)
+{
+    (void)id;
+    if (id >= keystore_num_pubkeys())
+        return (uint8_t *)0;
+    return (uint8_t *)PubKeys[id].pubkey;
+}
+
+int keystore_get_size(int id)
+{
+    (void)id;
+    if (id >= keystore_num_pubkeys())
+        return -1;
+    return (int)PubKeys[id].pubkey_size;
+}
+
+uint32_t keystore_get_mask(int id)
+{
+    if (id >= keystore_num_pubkeys())
+        return 0;
+    return PubKeys[id].part_id_mask;
+}
+
+

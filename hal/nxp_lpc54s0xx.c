@@ -90,36 +90,20 @@
 static uint8_t flash_page_cache[FLASH_PAGE_SIZE];
 
 /* Pre-computed SPIFI CMD register values for each flash operation */
-#define CMD_WRITE_ENABLE \
-    (SPIFI_CMD_DOUT | SPIFI_CMD_FRAMEFORM(FRAMEFORM_OPCODE_ONLY) | \
-     SPIFI_CMD_OPCODE(W25Q_CMD_WRITE_ENABLE))
+#define CMD_WRITE_ENABLE  (SPIFI_CMD_DOUT | SPIFI_CMD_FRAMEFORM(FRAMEFORM_OPCODE_ONLY) |  SPIFI_CMD_OPCODE(W25Q_CMD_WRITE_ENABLE))
 
-#define CMD_READ_STATUS \
-    (SPIFI_CMD_DATALEN(1) | SPIFI_CMD_POLL | \
-     SPIFI_CMD_FRAMEFORM(FRAMEFORM_OPCODE_ONLY) | \
-     SPIFI_CMD_OPCODE(W25Q_CMD_READ_STATUS1))
+#define CMD_READ_STATUS  (SPIFI_CMD_DATALEN(1) | SPIFI_CMD_POLL |  SPIFI_CMD_FRAMEFORM(FRAMEFORM_OPCODE_ONLY) |  SPIFI_CMD_OPCODE(W25Q_CMD_READ_STATUS1))
 
-#define CMD_SECTOR_ERASE \
-    (SPIFI_CMD_DOUT | SPIFI_CMD_FRAMEFORM(FRAMEFORM_OPCODE_3ADDR) | \
-     SPIFI_CMD_OPCODE(W25Q_CMD_SECTOR_ERASE))
+#define CMD_SECTOR_ERASE  (SPIFI_CMD_DOUT | SPIFI_CMD_FRAMEFORM(FRAMEFORM_OPCODE_3ADDR) |  SPIFI_CMD_OPCODE(W25Q_CMD_SECTOR_ERASE))
 
-#define CMD_PAGE_PROGRAM \
-    (SPIFI_CMD_DATALEN(FLASH_PAGE_SIZE) | SPIFI_CMD_DOUT | \
-     SPIFI_CMD_FRAMEFORM(FRAMEFORM_OPCODE_3ADDR) | \
-     SPIFI_CMD_OPCODE(W25Q_CMD_PAGE_PROGRAM))
+#define CMD_PAGE_PROGRAM  (SPIFI_CMD_DATALEN(FLASH_PAGE_SIZE) | SPIFI_CMD_DOUT |  SPIFI_CMD_FRAMEFORM(FRAMEFORM_OPCODE_3ADDR) |  SPIFI_CMD_OPCODE(W25Q_CMD_PAGE_PROGRAM))
 
 /* Memory-mode command: Quad I/O fast read (0xEB) — must match boot ROM config.
  * Boot ROM MCMD = 0xEB930000:
  *   opcode 0xEB, FRAMEFORM=4 (opcode+3addr), FIELDFORM=2 (addr+data quad),
  *   INTLEN=3 (3 intermediate/dummy bytes in quad mode) */
-#define MCMD_READ_QUAD \
-    (SPIFI_CMD_INTLEN(3) | SPIFI_CMD_FIELDFORM(FIELDFORM_DATA_QUAD) | \
-     SPIFI_CMD_FRAMEFORM(FRAMEFORM_OPCODE_3ADDR) | \
-     SPIFI_CMD_OPCODE(W25Q_CMD_FAST_READ_QUAD_IO))
+#define MCMD_READ_QUAD  (SPIFI_CMD_INTLEN(3) | SPIFI_CMD_FIELDFORM(FIELDFORM_DATA_QUAD) |  SPIFI_CMD_FRAMEFORM(FRAMEFORM_OPCODE_3ADDR) |  SPIFI_CMD_OPCODE(W25Q_CMD_FAST_READ_QUAD_IO))
 
-#ifdef NVM_FLASH_WRITEONCE
-#   error "wolfBoot LPC54S018M HAL: WRITEONCE not supported on SPIFI flash."
-#endif
 
 /* -------------------------------------------------------------------------- */
 /*  SYSCON registers (shared across clock + UART)                             */
@@ -139,7 +123,6 @@ static uint8_t flash_page_cache[FLASH_PAGE_SIZE];
 /* -------------------------------------------------------------------------- */
 /*  UART via Flexcomm0 (bare-metal, no SDK)                                   */
 /* -------------------------------------------------------------------------- */
-#ifdef DEBUG_UART
 
 /* SYSCON registers for clock gating and peripheral reset */
 #define SYSCON_AHBCLKCTRL0  (*(volatile uint32_t *)(SYSCON_BASE + 0x200))
@@ -282,21 +265,13 @@ void uart_write(const char *buf, unsigned int sz)
         ;
 }
 
-#endif /* DEBUG_UART */
 
 /* -------------------------------------------------------------------------- */
 /*  Boot-time initialization (runs from flash / XIP)                          */
 /* -------------------------------------------------------------------------- */
 
-#ifdef __WOLFBOOT
 
 /* Assert hook (in case any remaining SDK code uses assert) */
-void __assert_func(const char *a, int b, const char *c, const char *d)
-{
-    (void)a; (void)b; (void)c; (void)d;
-    while (1)
-        ;
-}
 
 /* Forward declaration — defined later in the file as RAMFUNCTION */
 static void RAMFUNCTION spifi_enter_memmode(void);
@@ -347,9 +322,7 @@ void hal_init(void)
      * Runs from RAM because changing MAINCLK affects SPIFI XIP. */
     hal_clock_boost();
 
-#ifdef DEBUG_UART
     uart_init();
-#endif
     wolfBoot_printf("wolfBoot HAL init\n");
 }
 
@@ -357,7 +330,6 @@ void hal_prepare_boot(void)
 {
 }
 
-#endif /* __WOLFBOOT */
 
 /* -------------------------------------------------------------------------- */
 /*  SPIFI flash helper functions — all MUST run from RAM                      */
