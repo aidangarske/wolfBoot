@@ -48,12 +48,17 @@
 #if TZ_SECURE()
 static int is_flash_nonsecure(uint32_t address)
 {
+#if defined(WOLFBOOT_SECURE_APP)
+    (void)address;
+    return 0;
+#else
     if (address >= WOLFBOOT_PARTITION_BOOT_ADDRESS &&
             address < WOLFBOOT_PARTITION_BOOT_ADDRESS +
             WOLFBOOT_PARTITION_SIZE) {
         return 1;
     }
     return 0;
+#endif
 }
 #endif
 
