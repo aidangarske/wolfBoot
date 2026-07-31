@@ -483,7 +483,7 @@ void isr_empty(void)
  */
 
 #if defined(__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && \
-    defined(TZEN)
+    defined(TZEN) && !defined(WOLFBOOT_SECURE_APP)
 #include "hal.h"
 #define VTOR (*(volatile uint32_t *)(0xE002ED08)) /* Non-secure VTOR */
 #else
@@ -531,7 +531,18 @@ void RAMFUNCTION do_boot(const uint32_t *app_offset)
      * and VTOR_NS points there directly. */
     VTOR = ((uint32_t)app_offset);
     asm volatile("msr msplim, %0" ::"r"(0));
-#   if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && \
+#   if defined(WOLFBOOT_SECURE_APP)
+    /* wolfTrust is a signed Secure runtime, not a Non-secure guest. Keep the
+     * CPU in Secure state and branch through the normal Secure reset vector. */
+    /* wolfBoot may have enabled its MPU while authenticating the image. The
+     * secure runtime installs its own memory map during Reset_Handler; leave
+     * the old map disabled across this handoff. */
+    mpu_off();
+    VTOR = ((uint32_t)app_offset);
+    asm volatile("msr msp, %0" :: "r"(app_end_stack));
+    asm volatile("cpsie i");
+    asm volatile("mov pc, %0" :: "r"(app_entry));
+#   elif defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3U) && \
        defined(TZEN)
     asm volatile("msr msp_ns, %0" ::"r"(app_end_stack));
 #if defined(TARGET_stm32n6)

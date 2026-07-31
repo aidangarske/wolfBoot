@@ -15,8 +15,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1335, USA
+ * along with this program; if not, see <https://www.gnu.org/licenses/>.
  */
 
 #include <stdint.h>
@@ -299,11 +298,17 @@ int hal_uds_derive_key(uint8_t *out, size_t out_len)
 
 int hal_attestation_get_lifecycle(uint32_t *lifecycle)
 {
+    uint32_t debugAuthStatus;
+    uint32_t productState;
+
     if (lifecycle == NULL) {
         return -1;
     }
 
-    *lifecycle = 0x3000u; /* PSA_LIFECYCLE_SECURED (default) */
+    productState = (FLASH_OPTSR_CUR & FLASH_OPTSR_PRODUCT_STATE_MASK) >>
+        FLASH_OPTSR_PRODUCT_STATE_SHIFT;
+    debugAuthStatus = *(volatile uint32_t *)CORTEX_M_DAUTHSTATUS_ADDRESS;
+    *lifecycle = stm32h5_attestation_lifecycle(productState, debugAuthStatus);
     return 0;
 }
 
@@ -774,9 +779,12 @@ void hal_init(void)
 void hal_prepare_boot(void)
 {
 
-    /* Keep clock settings when staging a NS-application */
+    /* Keep clock settings when staging a NS-application. A wolfTrust secure
+     * runtime owns the TrustZone peripherals after the handoff. */
 #if (TZ_SECURE())
+#if !defined(WOLFBOOT_SECURE_APP)
     periph_unsecure();
+#endif
 #else
     #ifdef WOLFBOOT_RESTORE_CLOCK
     clock_pll_off();

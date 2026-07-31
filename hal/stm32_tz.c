@@ -61,6 +61,11 @@ static void RAMFUNCTION hal_flash_nonsecure_lock(void)
 
 static int is_range_nonsecure(uint32_t address, int len)
 {
+#if defined(WOLFBOOT_SECURE_APP)
+    (void)address;
+    (void)len;
+    return 0;
+#else
 #ifndef DUALBANK_SWAP
     /* The non secure area begins at the BOOT partition */
     uint32_t min = WOLFBOOT_PARTITION_BOOT_ADDRESS;
@@ -89,6 +94,7 @@ static int is_range_nonsecure(uint32_t address, int len)
         return 1;
     return 0;
 #endif
+#endif /* WOLFBOOT_SECURE_APP */
 }
 
 
@@ -327,9 +333,12 @@ void hal_tz_sau_init(void)
     sau_init_region(0, WOLFBOOT_NSC_ADDRESS,
             WOLFBOOT_NSC_ADDRESS + WOLFBOOT_NSC_SIZE - 1, 1);
 
-    /* Non-secure flash alias (boot partition only) */
+    /* Non-secure flash alias (boot partition only). A secure application is
+     * deliberately kept out of the SAU NS window and is entered Secure. */
+#if !defined(WOLFBOOT_SECURE_APP)
     sau_init_region(1, WOLFBOOT_PARTITION_BOOT_ADDRESS,
             WOLFBOOT_PARTITION_BOOT_ADDRESS + WOLFBOOT_PARTITION_SIZE - 1, 0);
+#endif
 
     /* Non-secure RAM region: SRAM2 (64 KB) + SRAM3 (320 KB).
      * Lower bound widened from 0x20050000 to 0x20040000 to cover SRAM2,
