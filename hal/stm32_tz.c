@@ -241,10 +241,16 @@ void hal_gtzc_init(void)
      * unprivileged; with the reset default (PRIVCFGR=0xFFFFFFFF) the
      * DMA's descriptor/buffer reads from SRAM2 raise illegal-access
      * (TZIC1_SR4 bit 26) and the channel suspends with TPS=6 (TBU). */
+#if defined(WOLFBOOT_SECURE_APP)
+    for (i = 0; i < 4; i++) {
+        SET_GTZC1_MPCBBx_SECCFGR_VCTR(2, i, 0xFFFFFFFF);
+    }
+#else
     for (i = 0; i < 4; i++) {
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(2, i, 0x0);
         SET_GTZC1_MPCBBx_PRIVCFGR_VCTR(2, i, 0x0);
     }
+#endif
 
     /* Configure SRAM3 as non-secure (320 KB) but PRIVILEGED. The NS CPU
      * runs privileged (Thread mode) and can use SRAM3 freely; only the
@@ -252,9 +258,15 @@ void hal_gtzc_init(void)
      * descriptors/buffers are pinned to SRAM2 (.eth_buffers). Leaving
      * SRAM3 privileged lets a future NS OS own the unprivileged
      * boundary. */
+#if defined(WOLFBOOT_SECURE_APP)
+    for (i = 0; i < 20; i++) {
+        SET_GTZC1_MPCBBx_SECCFGR_VCTR(3, i, 0xFFFFFFFF);
+    }
+#else
     for (i = 0; i < 20; i++) {
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(3, i, 0x0);
     }
+#endif
 }
 
 #elif defined(TARGET_stm32u5)
