@@ -221,11 +221,16 @@ void hal_gtzc_init(void)
      * 0: Non-secure access only to block
      */
 
-    /* Configure SRAM1 as secure (Low 256 KB).
-     * wolfBoot links its own RAM/RAM_HEAP into the SRAM1 secure alias
-     * (0x30000000-0x3003FFFF, see hal/stm32h5.ld), so SRAM1 must stay
-     * secure for wolfBoot's .bss/stack/heap to remain accessible. */
+    /* Configure SRAM1 as secure. The wolfTrust secure-app handoff starts
+     * with its MSP at 0x300A0000, so the complete 512-KiB SRAM1 window must
+     * remain Secure until wolfTrust initializes its own guest split. */
+#if defined(WOLFBOOT_SECURE_APP)
+    for (i = 0; i < 32; i++) {
+#else
+    /* wolfBoot links its own RAM/RAM_HEAP into the lower SRAM1 secure alias
+     * (0x30000000-0x3003FFFF, see hal/stm32h5.ld). */
     for (i = 0; i < 16; i++) {
+#endif
         SET_GTZC1_MPCBBx_SECCFGR_VCTR(1, i, 0xFFFFFFFF);
     }
 
