@@ -1450,6 +1450,14 @@ static int wolfBoot_prepare_secure_handoff(
     if (hal_attestation_get_lifecycle(&lifecycle) != 0) {
         lifecycle = WOLFBOOT_SECURE_HANDOFF_LIFECYCLE_UNKNOWN;
     }
+    if (lifecycle == WOLFBOOT_SECURE_HANDOFF_LIFECYCLE_UNKNOWN) {
+        /* A part whose product state cannot be read (e.g. an unprovisioned
+         * device or one under emulation that does not model FLASH_OPTSR) is
+         * still in the earliest PSA lifecycle, not "unknown". Report
+         * assembly-and-test so attestation reflects a not-yet-secured part
+         * instead of an unattestable one. */
+        lifecycle = WOLFBOOT_SECURE_HANDOFF_LIFECYCLE_ASSEMBLY_AND_TEST;
+    }
     return wolfBoot_secure_handoff_build(handoff, boot->sha_hash,
         wolfBoot_get_blob_version(boot->hdr), lifecycle);
 }
